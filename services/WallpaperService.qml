@@ -14,6 +14,8 @@ Singleton {
     property string currentWallpaper: ""
     property bool _selfWrite: false
 
+    readonly property var supportedExtensions: [".jpg", ".jpeg", ".png", ".webp", ".avif", ".bmp", ".svg"]
+
     function setWallpaper(path: string): string {
         if (!path || path.trim() === "") {
             root.log.warn("Empty path passed to setWallpaper");
@@ -30,8 +32,18 @@ Singleton {
             cleanPath = Quickshell.env("HOME");
         }
 
+        if (!cleanPath.startsWith("/")) {
+            root.log.warn("Rejected invalid/relative wallpaper path:", path);
+            return "Error: Path must be absolute or start with ~/ (e.g. ~/Pictures/wall.jpg, /path/to/wall.png)";
+        }
+
+        const lower = cleanPath.toLowerCase();
+        if (!root.supportedExtensions.some(ext => lower.endsWith(ext))) {
+            root.log.warn("Rejected unsupported wallpaper format:", path);
+            return "Error: Unsupported format. Supported: jpg, jpeg, png, webp, avif, bmp, svg";
+        }
+
         root.currentWallpaper = cleanPath;
-        root.saveState();
         root.log.info("Wallpaper updated to:", cleanPath);
         return "Wallpaper set to: " + cleanPath;
     }
@@ -50,6 +62,11 @@ Singleton {
                     state = {};
                 }
             }
+
+            if (state.wallpaper === root.currentWallpaper) {
+                return;
+            }
+
             state.wallpaper = root.currentWallpaper;
             root._selfWrite = true;
             stateFile.setText(JSON.stringify(state, null, 2));

@@ -36,7 +36,9 @@ PanelWindow {
         sourceSize.height: root.height > 0 ? Math.round(root.height * Screen.devicePixelRatio) : 0
 
         onStatusChanged: {
-            if (status === Image.Error) {
+            if (status === Image.Ready) {
+                WallpaperService.saveState();
+            } else if (status === Image.Error) {
                 root.log.warn("Failed to load wallpaper image:", source);
             }
         }
