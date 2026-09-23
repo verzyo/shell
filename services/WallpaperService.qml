@@ -7,13 +7,16 @@ import Quickshell.Io
 Singleton {
     id: root
 
+    readonly property var log: Log.scoped("WallpaperService")
     readonly property string cacheDir: Quickshell.env("XDG_CACHE_HOME") || (Quickshell.env("HOME") + "/.cache")
     readonly property string stateFilePath: cacheDir + "/shell/state.json"
 
     property string currentWallpaper: ""
+    property bool _selfWrite: false
 
     function setWallpaper(path: string): string {
         if (!path || path.trim() === "") {
+            root.log.warn("Empty path passed to setWallpaper");
             return "Error: No path provided";
         }
 
@@ -29,6 +32,7 @@ Singleton {
 
         root.currentWallpaper = cleanPath;
         root.saveState();
+        root.log.info("Wallpaper updated to:", cleanPath);
         return "Wallpaper set to: " + cleanPath;
     }
 
@@ -47,9 +51,11 @@ Singleton {
                 }
             }
             state.wallpaper = root.currentWallpaper;
+            root._selfWrite = true;
             stateFile.setText(JSON.stringify(state, null, 2));
+            root.log.debug("State saved to:", root.stateFilePath);
         } catch (e) {
-            console.error("[WallpaperService] Failed to save state:", e);
+            root.log.error("Failed to save state:", e);
         }
     }
 
@@ -65,6 +71,10 @@ Singleton {
         printErrors: false
 
         onFileChanged: {
+            if (root._selfWrite) {
+                root._selfWrite = false;
+                return;
+            }
             stateFile.reload();
         }
 
@@ -73,17 +83,20 @@ Singleton {
                 const content = stateFile.text();
                 if (content && content.trim() !== "") {
                     const data = JSON.parse(content);
-                    if (data.wallpaper && typeof data.wallpaper === "string") {
+                    if (data.wallpaper && typeof data.wallpaper === "string" && data.wallpaper.startsWith("/")) {
                         root.currentWallpaper = data.wallpaper;
+                        root.log.info("Restored wallpaper from state:", root.currentWallpaper);
+                    } else if (data.wallpaper) {
+                        root.log.warn("Ignoring invalid wallpaper path in state.json:", data.wallpaper);
                     }
                 }
             } catch (e) {
-                console.error("[WallpaperService] Failed to parse state.json:", e);
+                root.log.error("Failed to parse state.json:", e);
             }
         }
 
         onLoadFailed: error => {
-        // First run or missing state file: silently wait until first wallpaper is set
+            root.log.debug("State file not found on initial load; waiting for initial wallpaper configuration");
         }
     }
 
