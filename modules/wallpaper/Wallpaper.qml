@@ -25,11 +25,28 @@ PanelWindow {
 
     property bool entranceDone: false
     property bool isHandingOff: false
+    readonly property bool isTransitioning: transitionAnimation.running
+    property string pendingWallpaper: ""
 
     function formatUrl(path: string): string {
         if (!path || path === "")
             return "";
         return path.startsWith("file://") ? path : "file://" + path;
+    }
+
+    function finalizeHandoff(): void {
+        root.isHandingOff = false;
+        nextWallpaper.visible = false;
+        nextWallpaper.source = "";
+        nextWallpaper.opacity = 0.0;
+        nextWallpaper.scale = 1.05;
+        WallpaperService.saveState();
+
+        if (root.pendingWallpaper !== "") {
+            const next = root.pendingWallpaper;
+            root.pendingWallpaper = "";
+            root.loadWallpaper(next);
+        }
     }
 
     function loadWallpaper(path: string): void {
@@ -45,6 +62,23 @@ PanelWindow {
         if (currentWallpaper.source.toString() === url)
             return;
 
+        if (root.isTransitioning || root.isHandingOff) {
+            if (nextWallpaper.source.toString() === url)
+                return;
+            root.pendingWallpaper = url;
+            return;
+        }
+
+        if (nextWallpaper.source.toString() === url && nextWallpaper.status === Image.Ready) {
+            nextWallpaper.opacity = 0.0;
+            nextWallpaper.scale = 1.05;
+            nextWallpaper.visible = true;
+            transitionAnimation.start();
+            return;
+        }
+
+        nextWallpaper.opacity = 0.0;
+        nextWallpaper.scale = 1.05;
         nextWallpaper.source = url;
     }
 
@@ -103,10 +137,7 @@ PanelWindow {
         onStatusChanged: {
             if (status === Image.Ready) {
                 if (root.isHandingOff) {
-                    root.isHandingOff = false;
-                    nextWallpaper.visible = false;
-                    nextWallpaper.source = "";
-                    WallpaperService.saveState();
+                    root.finalizeHandoff();
                 } else if (!root.entranceDone) {
                     root.entranceDone = true;
                     entranceAnimation.start();
@@ -141,22 +172,61 @@ PanelWindow {
         sourceSize.width: root.width > 0 ? Math.round(root.width * Screen.devicePixelRatio) : 0
         sourceSize.height: root.height > 0 ? Math.round(root.height * Screen.devicePixelRatio) : 0
 
+        opacity: 0.0
+        scale: 1.05
+        transformOrigin: Item.Center
+
+        ParallelAnimation {
+            id: transitionAnimation
+
+            NumberAnimation {
+                target: nextWallpaper
+                property: "opacity"
+                from: 0.0
+                to: 1.0
+                duration: Appearance.animationCurves.expressiveDefaultSpatialDuration
+                easing.type: Easing.BezierSpline
+                easing.bezierCurve: Appearance.animationCurves.standard
+            }
+
+            NumberAnimation {
+                target: nextWallpaper
+                property: "scale"
+                from: 1.05
+                to: 1.0
+                duration: Appearance.animationCurves.expressiveSlowSpatialDuration
+                easing.type: Easing.BezierSpline
+                easing.bezierCurve: Appearance.animationCurves.emphasizedDecel
+            }
+
+            onFinished: {
+                root.isHandingOff = true;
+                currentWallpaper.source = nextWallpaper.source;
+                if (currentWallpaper.status === Image.Ready && currentWallpaper.source.toString() === nextWallpaper.source.toString()) {
+                    root.finalizeHandoff();
+                }
+            }
+        }
+
         onStatusChanged: {
             if (status === Image.Ready) {
+                if (!root.entranceDone)
+                    return;
+
                 visible = true;
-                root.isHandingOff = true;
-                currentWallpaper.source = source;
-                if (currentWallpaper.status === Image.Ready) {
-                    root.isHandingOff = false;
-                    nextWallpaper.visible = false;
-                    nextWallpaper.source = "";
-                    WallpaperService.saveState();
-                }
+                opacity = 0.0;
+                scale = 1.05;
+                transitionAnimation.start();
             } else if (status === Image.Error) {
                 root.log.warn("Failed to load next wallpaper:", source);
                 source = "";
                 visible = false;
                 root.isHandingOff = false;
+                if (root.pendingWallpaper !== "") {
+                    const next = root.pendingWallpaper;
+                    root.pendingWallpaper = "";
+                    root.loadWallpaper(next);
+                }
             }
         }
     }
