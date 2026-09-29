@@ -14,6 +14,47 @@ Singleton {
     readonly property var log: Log.scoped("NiriService")
     readonly property string socketPath: Quickshell.env("NIRI_SOCKET") || ""
 
+    property bool overviewOpened: false
+
+    Component.onCompleted: {
+        query("OverviewState", res => {
+            if (!res || !res.Ok)
+                return;
+            const state = res.Ok.OverviewState;
+            root.overviewOpened = typeof state === "boolean" ? state : (state?.is_open ?? false);
+            root.log.debug("Initial overview state loaded:", root.overviewOpened);
+        });
+    }
+
+    ReconnectSocket {
+        id: eventStreamSocket
+        path: root.socketPath
+        connected: root.socketPath !== ""
+
+        onConnectionStateChanged: {
+            if (linkUp) {
+                send('"EventStream"');
+            }
+        }
+
+        parser: SplitParser {
+            onRead: line => {
+                if (!line || line.trim() === "")
+                    return;
+
+                try {
+                    const event = JSON.parse(line);
+                    if (event.OverviewOpenedOrClosed) {
+                        root.overviewOpened = !!event.OverviewOpenedOrClosed.is_open;
+                        root.log.debug("Overview state changed via event:", root.overviewOpened);
+                    }
+                } catch (e) {
+                    root.log.error("Failed to parse Niri IPC event:", e);
+                }
+            }
+        }
+    }
+
     function query(requestPayload: var, callback: var): void {
         if (!root.socketPath) {
             root.log.warn("NIRI_SOCKET environment variable not set; cannot query Niri");
@@ -66,7 +107,7 @@ Singleton {
 
                     try {
                         const parsed = JSON.parse(line);
-                        console.log("Niri response (" + JSON.stringify(socket.requestPayload) + "):", JSON.stringify(parsed));
+                        root.log.debug("Niri query response:", JSON.stringify(parsed));
                         if (socket.callback) {
                             socket.callback(parsed);
                         }
