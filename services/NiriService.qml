@@ -47,6 +47,10 @@ Singleton {
         watchChanges: true
         printErrors: false
 
+        onFileChanged: {
+            configFileView.reload();
+        }
+
         onTextChanged: {
             root.reloadConfig();
         }
