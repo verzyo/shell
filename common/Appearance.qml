@@ -375,6 +375,10 @@ Singleton {
         watchChanges: true
         printErrors: false
 
+        onFileChanged: {
+            themeFileView.reload();
+        }
+
         onTextChanged: {
             root.applyTheme(themeFileView.text());
         }
