@@ -6,6 +6,7 @@ import qs.services
 import qs.modules.wallpaper
 import qs.modules.session
 import qs.modules.corners
+import qs.modules.bar
 
 ShellRoot {
     Component.onCompleted: {
@@ -16,5 +17,6 @@ ShellRoot {
 
     Wallpaper {}
     ScreenCorners {}
+    Bar {}
     SessionCurtain {}
 }
